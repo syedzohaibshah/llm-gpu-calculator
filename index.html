@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM GPU Memory Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>LLM GPU Calculator</h1>
+            <p>Estimate memory requirements for Inference, Training, and Fine-tuning</p>
+        </header>
+
+        <main>
+            <div class="grid-layout">
+                <!-- Input Section -->
+                <section class="input-panel">
+                    <div class="card">
+                        <h2>Configuration</h2>
+                        <form id="calculator-form">
+                            <!-- Task Type -->
+                            <div class="form-group">
+                                <label for="task-type">Task Type</label>
+                                <select id="task-type" name="task-type">
+                                    <option value="inference">Inference</option>
+                                    <option value="training_full">Full Training</option>
+                                    <option value="training_lora">LoRA Fine-tuning</option>
+                                    <option value="training_qlora">QLoRA Fine-tuning</option>
+                                </select>
+                            </div>
+
+                            <!-- Model Parameters -->
+                            <div class="form-group">
+                                <label for="model-size">Model Size (Billion Parameters)</label>
+                                <input type="number" id="model-size" name="model-size" value="7" step="0.1" min="0.1">
+                                <span class="help-text">e.g., 7 for Llama-2-7b, 70 for Llama-2-70b</span>
+                            </div>
+
+                            <!-- Precision -->
+                            <div class="form-group">
+                                <label for="precision">Model Precision</label>
+                                <select id="precision" name="precision">
+                                    <option value="fp32">FP32 (32-bit)</option>
+                                    <option value="fp16" selected>FP16/BF16 (16-bit)</option>
+                                    <option value="int8">INT8 (8-bit)</option>
+                                    <option value="int4">INT4 (4-bit)</option>
+                                </select>
+                            </div>
+
+                            <!-- Advanced Settings Toggle -->
+                            <div class="form-group">
+                                <button type="button" id="toggle-advanced" class="text-btn">Show Advanced
+                                    Settings</button>
+                            </div>
+
+                            <div id="advanced-settings" class="hidden">
+                                <div class="form-group">
+                                    <label for="batch-size">Batch Size</label>
+                                    <input type="number" id="batch-size" value="1" min="1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="seq-len">Sequence Length (Context)</label>
+                                    <input type="number" id="seq-len" value="4096" min="1">
+                                </div>
+                                <div class="form-group" id="lora-rank-group" style="display: none;">
+                                    <label for="lora-rank">LoRA Rank (r)</label>
+                                    <input type="number" id="lora-rank" value="64" min="1">
+                                </div>
+                                <div class="form-group" id="lora-alpha-group" style="display: none;">
+                                    <label for="lora-alpha">LoRA Alpha</label>
+                                    <input type="number" id="lora-alpha" value="16" min="1">
+                                </div>
+                                <div class="form-group" id="trainable-params-group" style="display: none;">
+                                    <label for="trainable-percent">Trainable Params % (Estimate)</label>
+                                    <input type="number" id="trainable-percent" value="0.2" step="0.1" min="0.01">
+                                </div>
+                                <div class="form-group" id="optimizer-group" style="display: none;">
+                                    <label for="optimizer">Optimizer</label>
+                                    <select id="optimizer">
+                                        <option value="adamw">AdamW (12 bytes/param)</option>
+                                        <option value="sgd">SGD (4 bytes/param)</option>
+                                        <option value="adamw_8bit">8-bit AdamW (6 bytes/param)</option>
+                                        <option value="paged_adamw_8bit">Paged 8-bit AdamW</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="num-layers">Num Layers (Hidden)</label>
+                                    <input type="number" id="num-layers" value="32" min="1">
+                                    <span class="help-text">Used for KV cache calc</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="num-heads">Num Attention Heads</label>
+                                    <input type="number" id="num-heads" value="32" min="1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="num-kv-heads">Num KV Heads (GQA/MQA)</label>
+                                    <input type="number" id="num-kv-heads" value="32" min="1">
+                                    <span class="help-text">Equal to Attn Heads for standard, smaller for GQA (e.g., 8
+                                        for Llama 3 70B)</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="hidden-dim">Hidden Dimension (Hidden)</label>
+                                    <input type="number" id="hidden-dim" value="4096" min="1">
+                                </div>
+                                <div class="form-group" id="dataset-group" style="display: none;">
+                                    <label for="dataset-tokens">Dataset Size (Billions of Tokens)</label>
+                                    <input type="number" id="dataset-tokens" value="1" step="0.1" min="0.001">
+                                    <span class="help-text">For training time estimation</span>
+                                </div>
+                                <div class="form-group" id="epochs-group" style="display: none;">
+                                    <label for="epochs">Epochs</label>
+                                    <input type="number" id="epochs" value="1" min="1">
+                                </div>
+                                <div class="form-group" id="output-tokens-group" style="display: block;">
+                                    <label for="output-tokens">Output Tokens (Generation)</label>
+                                    <input type="number" id="output-tokens" value="512" min="1">
+                                    <span class="help-text">For inference time estimation</span>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Results Section -->
+                <section class="results-panel">
+                    <div class="card result-card">
+                        <h2>Estimated Memory</h2>
+                        <div class="total-memory">
+                            <span id="total-vram-display">0 GB</span>
+                        </div>
+
+                        <div class="breakdown">
+                            <h3>Breakdown</h3>
+                            <div class="breakdown-item">
+                                <span class="label">Model Weights</span>
+                                <span class="value" id="weight-memory">0 GB</span>
+                            </div>
+                            <div class="breakdown-item" id="kv-cache-row">
+                                <span class="label">KV Cache</span>
+                                <span class="value" id="kv-memory">0 GB</span>
+                            </div>
+                            <div class="breakdown-item" id="grad-row" style="display: none;">
+                                <span class="label">Gradients</span>
+                                <span class="value" id="grad-memory">0 GB</span>
+                            </div>
+                            <div class="breakdown-item" id="opt-row" style="display: none;">
+                                <span class="label">Optimizer States</span>
+                                <span class="value" id="opt-memory">0 GB</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="label">Activations</span>
+                                <span class="value" id="act-memory">0 GB</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="label">Overhead (CUDA/System)</span>
+                                <span class="value" id="overhead-memory">0 GB</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span class="label">Estimated Time</span>
+                                <span class="value" id="time-estimate">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card recommendation-card">
+                        <h2>Recommended GPUs</h2>
+                        <div id="gpu-recommendations" class="gpu-list">
+                            <!-- Recommendations will be injected here -->
+                            <div class="placeholder-text">Enter parameters to see recommendations</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
